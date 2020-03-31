@@ -262,34 +262,7 @@ set_no_derivatives_options() {
 # Get this using
 # grep 'option(SSG_PRODUCT' CMakeLists.txt  | sed -e 's/option(SSG_PRODUCT_\(\w\+\).*/\1/'
 all_cmake_products=(
-	CHROMIUM
-	DEBIAN8
-	DEBIAN9
-	DEBIAN10
-	EAP6
-	EXAMPLE
-	FEDORA
-	FIREFOX
-	FUSE6
-	JRE
-	OCP3
-	OCP4
-	OL7
-	OL8
-	OPENSUSE
-	RHEL6
-	RHEL7
 	RHEL8
-	RHOSP10
-	RHOSP13
-	RHV4
-	SLE11
-	SLE12
-	UBUNTU1404
-	UBUNTU1604
-	UBUNTU1804
-	WRLINUX8
-	WRLINUX1019
 )
 
 DEFAULT_OVAL_MAJOR_VERSION=5
