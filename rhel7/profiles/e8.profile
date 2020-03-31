@@ -78,6 +78,10 @@ selections:
   - network_sniffer_disabled
 
   ### Admin privileges
+<<<<<<< HEAD
+=======
+  - accounts_no_uid_except_zero
+>>>>>>> d7011fb... Migration to 0.1.49
   - sudo_remove_nopasswd
   - sudo_remove_no_authenticate
   - sudo_require_authentication

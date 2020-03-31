@@ -55,6 +55,24 @@ def add_sub_element(parent, tag, data):
     return element
 
 
+def reorder_according_to_ordering(unordered, ordering, regex=None):
+    ordered = []
+    if regex is None:
+        regex = "|".join(["({0})".format(item) for item in ordering])
+    regex = re.compile(regex)
+
+    items_to_order = list(filter(regex.match, unordered))
+    unordered = set(unordered)
+
+    for priority_type in ordering:
+        for item in items_to_order:
+            if priority_type in item and item in unordered:
+                ordered.append(item)
+                unordered.remove(item)
+    ordered.extend(list(unordered))
+    return ordered
+
+
 def add_warning_elements(element, warnings):
     # The use of [{dict}, {dict}] in warnings is to handle the following
     # scenario where multiple warnings have the same category which is
@@ -86,15 +104,15 @@ class Profile(object):
         self.variables = dict()
         self.refine_rules = defaultdict(list)
 
-    @staticmethod
-    def from_yaml(yaml_file, env_yaml=None):
+    @classmethod
+    def from_yaml(cls, yaml_file, env_yaml=None):
         yaml_contents = open_and_expand(yaml_file, env_yaml)
         if yaml_contents is None:
             return None
 
         basename, _ = os.path.splitext(os.path.basename(yaml_file))
 
-        profile = Profile(basename)
+        profile = cls(basename)
         profile.title = required_key(yaml_contents, "title")
         del yaml_contents["title"]
         profile.description = required_key(yaml_contents, "description")
@@ -126,6 +144,10 @@ class Profile(object):
             selections.append("!"+item)
         for varname in self.variables.keys():
             selections.append(varname+"="+self.variables.get(varname))
+        for rule, refinements in self.refine_rules.items():
+            for prop, val in refinements:
+                selections.append("{rule}.{property}={value}"
+                                  .format(rule=rule, property=prop, value=val))
         to_dump["selections"] = selections
         with open(file_name, "w+") as f:
             yaml.dump(to_dump, f, indent=4)
@@ -405,13 +427,13 @@ class Benchmark(object):
 
         self.add_value(conditional_clause)
 
-    @staticmethod
-    def from_yaml(yaml_file, id_, product_yaml=None):
+    @classmethod
+    def from_yaml(cls, yaml_file, id_, product_yaml=None):
         yaml_contents = open_and_macro_expand(yaml_file, product_yaml)
         if yaml_contents is None:
             return None
 
-        benchmark = Benchmark(id_)
+        benchmark = cls(id_)
         benchmark.title = required_key(yaml_contents, "title")
         del yaml_contents["title"]
         benchmark.status = required_key(yaml_contents, "status")
@@ -520,17 +542,15 @@ class Benchmark(object):
             root.append(self.bash_remediation_fns_group)
 
         groups_in_bench = list(self.groups.keys())
+        priority_order = ["system", "services"]
+        groups_in_bench = reorder_according_to_ordering(groups_in_bench, priority_order)
+
         # Make system group the first, followed by services group
-        group_priority_order = ["system", "services"]
-        for group_id in group_priority_order:
+        for group_id in groups_in_bench:
             group = self.groups.get(group_id)
             # Products using application benchmark don't have system or services group
             if group is not None:
                 root.append(group.to_xml_element())
-                groups_in_bench.remove(group_id)
-        # Add any remaining top level groups
-        for group_id in groups_in_bench:
-            root.append(self.groups.get(group_id).to_xml_element())
 
         for rule in self.rules.values():
             root.append(rule.to_xml_element())
@@ -585,14 +605,14 @@ class Group(object):
         self.rules = {}
         self.platform = None
 
-    @staticmethod
-    def from_yaml(yaml_file, env_yaml=None):
+    @classmethod
+    def from_yaml(cls, yaml_file, env_yaml=None):
         yaml_contents = open_and_macro_expand(yaml_file, env_yaml)
         if yaml_contents is None:
             return None
 
         group_id = os.path.basename(os.path.dirname(yaml_file))
-        group = Group(group_id)
+        group = cls(group_id)
         group.prodtype = yaml_contents.pop("prodtype", "all")
         group.title = required_key(yaml_contents, "title")
         del yaml_contents["title"]
@@ -647,17 +667,12 @@ class Group(object):
         # The Rules are ordered in more logical way, and
         # remediation order is natural, first the package is installed, then configured.
         rules_in_group = list(self.rules.keys())
-        regex = re.compile(r'(package_.*_(installed|removed))|(service_.*_(enabled|disabled))$')
-        priority_rules = list(filter(regex.match, rules_in_group))
+        regex = r'(package_.*_(installed|removed))|(service_.*_(enabled|disabled))$'
         priority_order = ["installed", "removed", "enabled", "disabled"]
-        # Add priority rules in priority order, first all packages installed, then removed,
+        rules_in_group = reorder_according_to_ordering(rules_in_group, priority_order, regex)
+
+        # Add rules in priority order, first all packages installed, then removed,
         # followed by services enabled, then disabled
-        for priority_type in priority_order:
-            for priority_rule_id in priority_rules:
-                if priority_type in priority_rule_id:
-                    group.append(self.rules.get(priority_rule_id).to_xml_element())
-                    rules_in_group.remove(priority_rule_id)
-        # Add remaining rules in the group
         for rule_id in rules_in_group:
             group.append(self.rules.get(rule_id).to_xml_element())
 
@@ -665,7 +680,17 @@ class Group(object):
         # As package installed/removed and service enabled/disabled rules are usuallly in
         # top level group, this ensures groups that further configure a package or service
         # are after rules that install or remove it.
-        for _group in self.groups.values():
+        groups_in_group = list(self.groups.keys())
+        # The FIPS group should come before Crypto - if we want to set a different (stricter) Crypto Policy than FIPS.
+        # the firewalld_activation must come before ruleset_modifications, othervise
+        # remediations for ruleset_modifications won't work
+        # rules from group disabling_ipv6 must precede rules from configuring_ipv6,
+        # otherwise the remediation prints error although it is successful
+        priority_order = ["fips", "crypto", "firewalld_activation",
+        "ruleset_modifications", "disabling_ipv6", "configuring_ipv6"]
+        groups_in_group = reorder_according_to_ordering(groups_in_group, priority_order)
+        for group_id in groups_in_group:
+            _group = self.groups[group_id]
             group.append(_group.to_xml_element())
 
         return group
@@ -740,8 +765,8 @@ class Rule(object):
         self.platform = None
         self.template = None
 
-    @staticmethod
-    def from_yaml(yaml_file, env_yaml=None):
+    @classmethod
+    def from_yaml(cls, yaml_file, env_yaml=None):
         yaml_file = os.path.normpath(yaml_file)
 
         yaml_contents = open_and_macro_expand(yaml_file, env_yaml)
@@ -752,7 +777,7 @@ class Rule(object):
         if rule_id == "rule" and ext == ".yml":
             rule_id = get_rule_dir_id(yaml_file)
 
-        rule = Rule(rule_id)
+        rule = cls(rule_id)
 
         try:
             rule._set_attributes_from_dict(yaml_contents)
@@ -1118,8 +1143,10 @@ class DirectoryLoader(object):
             self._recurse_into_subdirs()
             self._process_rules()
 
-    def process_directory_tree(self, start_dir):
+    def process_directory_tree(self, start_dir, extra_group_dirs=None):
         self._collect_items_to_load(start_dir)
+        if extra_group_dirs is not None:
+            self.subdirectories += extra_group_dirs
         self._load_group_process_and_recurse(start_dir)
 
     def _recurse_into_subdirs(self):

@@ -2,9 +2,7 @@
   <definition class="compliance" id="api_server_request_timeout" version="1">
     <metadata>
       <title>Configure the API Server Request Timeout</title>
-      <affected family="unix">
-        <platform>multi_platform_ocp</platform>
-      </affected>
+      {{{- oval_affected(products) }}}
       <description>All components that use the API should connect via the secured port,
     authenticate themselves, and be authorized to use the API.</description>
     </metadata>
@@ -18,11 +16,19 @@
     <ind:state state_ref="state_api_server_request_timeout" />
   </ind:textfilecontent54_test>
 
+{{%- if product == "ocp4" %}}
+  <ind:textfilecontent54_object id="object_api_server_request_timeout" version="1">
+    <ind:filepath>/etc/kubernetes/static-pod-resources/configmaps/config/config.yaml</ind:filepath>
+    <ind:pattern operation="pattern match">^.*"apiServerArguments":[\s]*{.*"request-timeout":[\s]*\[.*"(\d+)".*\][,]*.*$</ind:pattern>
+    <ind:instance datatype="int">1</ind:instance>
+  </ind:textfilecontent54_object>
+{{% else %}}
   <ind:textfilecontent54_object id="object_api_server_request_timeout" version="1">
     <ind:filepath>/etc/origin/master/master-config.yaml</ind:filepath>
     <ind:pattern operation="pattern match">^[\s]*kubernetesMasterConfig\:(?:[^\n]*\n+)+?[\s]*apiServerArguments\:(?:[^\n]*\n+)+?[\s]*request-timeout\:[\s]*[\n]+[\s]*-[\s]+(\S+)[\s]*$</ind:pattern>
     <ind:instance datatype="int">1</ind:instance>
   </ind:textfilecontent54_object>
+{{%- endif %}}
 
   <ind:textfilecontent54_state id="state_api_server_request_timeout" version="1">
     <ind:subexpression datatype="string" operation="pattern match">^300$</ind:subexpression>

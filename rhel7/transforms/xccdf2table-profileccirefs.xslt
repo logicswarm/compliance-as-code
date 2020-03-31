@@ -3,9 +3,12 @@
 
 <xsl:import href="../../shared/transforms/shared_xccdf2table-profileccirefs.xslt"/>
 
+<<<<<<< HEAD
 <xsl:variable name="cci_list" select="document('../../shared/references/disa-cci-list.xml')/cci:cci_list" />
 <xsl:variable name="os_srg" select="document('../../shared/references/disa-os-srg-v1r5.xml')/cdf:Benchmark" />
 
+=======
+>>>>>>> d7011fb... Migration to 0.1.49
 <xsl:include href="constants.xslt"/>
 <xsl:include href="table-style.xslt"/>
 
