@@ -3,3 +3,5 @@
 
 # CloudFormation packaged template
 cloudformation/packaged.template
+
+.DS_Store
